@@ -92,6 +92,7 @@ typedef struct
   bool stack_overflow;
   char stack_overflow_taskname[16];
   task_info_t curr_task[portNUM_PROCESSORS];
+  uint32_t  battery12vinfopacked;
   } boot_data_t;
 
 extern boot_data_t boot_data;

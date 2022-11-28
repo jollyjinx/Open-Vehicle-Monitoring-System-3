@@ -49,6 +49,7 @@ static const char *TAG = "housekeeping";
 #include "console_async.h"
 #include "ovms_module.h"
 #include "ovms_boot.h"
+#include "ovms_12vbattery.h"
 #include "vehicle.h"
 #include "dbc_app.h"
 #ifdef CONFIG_OVMS_COMP_SERVER_V2
@@ -79,18 +80,19 @@ void HousekeepingUpdate12V()
   if (MyPeripherals == NULL)
     return;
 
+
   // Allow the user to adjust the ADC conversion factor
-  float f = MyConfig.GetParamValueFloat("system.adc","factor12v");
-  if (f == 0) f = 195.7;
-  float v = (float)MyPeripherals->m_esp32adc->read() / f;
+
+  float refvoltage = MyConfig.GetParamValueFloat("vehicle","12v.ref", 12.6);
+  float f = MyConfig.GetParamValueFloat("system.adc","factor12v",195.7);
+  float v = currentBatteryVoltageAdjusted(refvoltage,refvoltage * f );
+
+  ESP_LOGI(TAG, "Voltage:%f factor:%f refvoltage:%f",v,f,refvoltage);
+
   // smooth out ADC errors & noise:
-  if (m1->AsFloat() != 0)
-    v = (m1->AsFloat() * 4 + v) / 5;
-  v = trunc(v*100) / 100;
-  if (v < 1.0) v=0;
   m1->SetValue(v);
   if (StandardMetrics.ms_v_bat_12v_voltage_ref->AsFloat() == 0)
-    StandardMetrics.ms_v_bat_12v_voltage_ref->SetValue(MyConfig.GetParamValueFloat("vehicle","12v.ref", 12.6));
+    StandardMetrics.ms_v_bat_12v_voltage_ref->SetValue(refvoltage);
 #endif // #ifdef CONFIG_OVMS_COMP_ADC
   }
 

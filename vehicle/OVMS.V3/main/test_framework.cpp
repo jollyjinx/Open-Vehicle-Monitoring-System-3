@@ -46,6 +46,7 @@ static const char *TAG = "test";
 #include "ovms_config.h"
 #include "can.h"
 #include "strverscmp.h"
+#include "ovms_12vbattery.h"
 
 void test_deepsleep(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, const char* const* argv)
   {
@@ -54,9 +55,15 @@ void test_deepsleep(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int arg
     {
     sleeptime = atoi(argv[0]);
     }
-  writer->puts("Entering deep sleep...");
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
-  esp_deep_sleep(1000000LL * sleeptime);
+
+    uint32_t packedvalue = packedValueFromConfiguration();
+    float   wakeVoltage         = ((float)(packedvalue >> 16)) / 1000.0;
+    float   calibrationFactor   = ((float)(packedvalue & 0xFFFF)) / 10.0;
+    writer->printf("Entering deep sleep... %f %f %d\n",wakeVoltage,calibrationFactor,sleeptime);
+
+    sleepImmediately(packedvalue,sleeptime);
+//  vTaskDelay(1000 / portTICK_PERIOD_MS);
+//  esp_deep_sleep(1000000LL * sleeptime);
   }
 
 void test_javascript(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, const char* const* argv)
@@ -318,6 +325,20 @@ void test_mkstemp(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc,
   if (fd2 >= 0) { close(fd2); unlink(tn2); }
   }
 
+
+void test_batterylevel(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, const char* const* argv)
+  {
+    uint32_t packedvalue = packedValueFromConfiguration();
+    float   wakeVoltage         = ((float)(packedvalue >> 16)) / 1000.0;
+    float   calibrationFactor   = ((float)(packedvalue & 0xFFFF)) / 10.0;
+    bool isacceptable = isBatteryInAcceptableRange(packedvalue);
+
+    writer->printf("isBatteryInAcceptableRange: %d\n",isacceptable);
+
+    float voltage = currentBatteryVoltageAdjusted( wakeVoltage , wakeVoltage * calibrationFactor );
+    writer->printf("test %f\n",voltage);
+   }
+
 void test_string(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, const char* const* argv)
   {
   int loopcnt = atoi(argv[0]);
@@ -403,7 +424,9 @@ TestFrameworkInit::TestFrameworkInit()
   cmd_test->RegisterCommand("cantx", "Test CAN bus transmission", test_can, "[<port>] [<number>]", 0, 2);
   cmd_test->RegisterCommand("canrx", "Test CAN bus reception", test_can, "[<port>] [<number>]", 0, 2);
   cmd_test->RegisterCommand("mkstemp", "Test mkstemp function", test_mkstemp, "<file>", 1, 1);
+  cmd_test->RegisterCommand("batterylevel", "Test batterylevel function", test_batterylevel);
   cmd_test->RegisterCommand("string", "Test std::string memory corruption", test_string, "<loopcnt> <mode>\n"
     "mode: 1=m.AsJSON, 2=m.AsString, 3=m.name, 4=const cfg string, 5=const local cstr, 6=const local string", 2, 2);
   cmd_test->RegisterCommand("commands", "List command tree", test_command);
   }
+

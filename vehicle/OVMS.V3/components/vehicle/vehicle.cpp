@@ -46,6 +46,7 @@ static const char *TAG = "vehicle";
 #endif // #ifdef CONFIG_OVMS_COMP_WEBSERVER
 #include <ovms_peripherals.h>
 #include <string_writer.h>
+#include "ovms_12vbattery.h"
 #include "vehicle.h"
 
 
@@ -631,23 +632,25 @@ void OvmsVehicle::VehicleTicker1(std::string event, void* data)
       }
     }
 
-  if ((m_ticker % 60) == 0)
+  if ((m_ticker % 32) == 0)     // every 32 seconds so it will be tested at least twice before shutdown when set to 1 minute shutdown
     {
     // check 12V voltage:
-    float volt = StandardMetrics.ms_v_bat_12v_voltage->AsFloat();
-    // …against the maximum of default and measured reference voltage, so alerts will also
-    //  be triggered if the measured ref follows a degrading battery:
-    float dref = MyConfig.GetParamValueFloat("vehicle", "12v.ref", 12.6);
-    float vref = MAX(StandardMetrics.ms_v_bat_12v_voltage_ref->AsFloat(), dref);
+    float currentvoltage = StandardMetrics.ms_v_bat_12v_voltage->AsFloat();
+    float nominalvoltage = MyConfig.GetParamValueFloat("vehicle", "12v.ref", 12.6);
+    float alertvoltage = MyConfig.GetParamValueFloat("vehicle", "12v.alert", 1.6);
+
+    float alarmvoltage = nominalvoltage - alertvoltage;
+
+    bool voltageIsOk = voltageIsInAcceptableRange(currentvoltage,alarmvoltage);
     bool alert_on = StandardMetrics.ms_v_bat_12v_voltage_alert->AsBool();
-    float alert_threshold = MyConfig.GetParamValueFloat("vehicle", "12v.alert", 1.6);
-    if (!alert_on && volt > 0 && vref > 0 && vref-volt > alert_threshold)
+
+    if (!alert_on && !voltageIsOk )
       {
       StandardMetrics.ms_v_bat_12v_voltage_alert->SetValue(true);
       MyEvents.SignalEvent("vehicle.alert.12v.on", NULL);
       if (m_autonotifications) Notify12vCritical();
       }
-    else if (alert_on && volt > 0 && vref > 0 && vref-volt < alert_threshold*0.6)
+    else if (alert_on && voltageIsOk )
       {
       StandardMetrics.ms_v_bat_12v_voltage_alert->SetValue(false);
       MyEvents.SignalEvent("vehicle.alert.12v.off", NULL);

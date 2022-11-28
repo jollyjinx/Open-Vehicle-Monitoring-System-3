@@ -43,6 +43,7 @@ static const char *TAG = "boot";
 
 #include "ovms.h"
 #include "ovms_boot.h"
+#include "ovms_12vbattery.h"
 #include "ovms_command.h"
 #include "ovms_metrics.h"
 #include "ovms_notify.h"
@@ -153,6 +154,10 @@ void boot_status(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, 
   writer->printf("  Reset reason: %s (%d)\n",MyBoot.GetResetReasonName(),MyBoot.GetResetReason());
   writer->printf("  Crash counters: %d total, %d early\n",MyBoot.GetCrashCount(),MyBoot.GetEarlyCrashCount());
 
+
+  uint32_t packedVoltage = boot_data.battery12vinfopacked;
+  writer->printf("  Battery Adjustment: %d %d\n",(packedVoltage >>16),(packedVoltage & 0xFFFF) );
+
   if (MyBoot.m_shutdown_timer>0)
     {
     writer->printf("\nShutdown for %s in progress (%d secs, waiting for %d tasks)\n",
@@ -252,24 +257,7 @@ Boot::Boot()
     // normal operation now. MyPeripherals has not been initialized yet, so we need
     // to read the ADC manually here.
     #ifdef CONFIG_OVMS_COMP_ADC
-      // Note: RTC_MODULE nags about a lock release before aquire, this can be ignored
-      //  (reason: RTC_MODULE needs FreeRTOS for locking, which hasn't been started yet)
-      adc1_config_width(ADC_WIDTH_12Bit);
-      adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_11db);
-      uint32_t adc_level = 0;
-      for (int i = 0; i < 5; i++)
-        adc_level += adc1_get_raw(ADC1_CHANNEL_0);
-      float level_12v = (float) adc_level / 5 / 195.7;
-      ESP_LOGI(TAG, "12V level: ~%.1fV", level_12v);
-      if (level_12v > 11.0)
-        ESP_LOGI(TAG, "12V level sufficient, proceeding with boot");
-      else if (level_12v < 1.0)
-        ESP_LOGI(TAG, "Assuming USB powered, proceeding with boot");
-      else
-        {
-        ESP_LOGE(TAG, "12V level insufficient, re-entering deep sleep");
-        esp_deep_sleep(1000000LL * 60);
-        }
+    sleepImmediatelyIfNeeded();
     #else
       ESP_LOGW(TAG, "ADC not available, cannot check 12V level");
     #endif // CONFIG_OVMS_COMP_ADC
@@ -284,6 +272,8 @@ Boot::Boot()
     {
     boot_data.boot_count++;
     ESP_LOGI(TAG, "Boot #%d reasons for CPU0=%d and CPU1=%d",boot_data.boot_count,cpu0,cpu1);
+
+    sleepImmediatelyIfNeeded();
 
     if (boot_data.soft_reset)
       {
@@ -386,17 +376,19 @@ const char* Boot::GetResetReasonName()
     : "Unknown reset reason";
   }
 
+
 static void boot_shutdown_done(const char* event, void* data)
   {
-  MyConfig.unmount();
-
   if (MyBoot.m_shutdown_deepsleep)
     {
     // For consistency with init, instead of calling MyPeripherals->m_esp32->SetPowerMode(DeepSleep):
-    esp_deep_sleep(1000000LL * 60);
+    uint32_t packedValue = packedValueFromConfiguration();
+    MyConfig.unmount();
+    sleepImmediately(packedValue);
     }
   else
     {
+  MyConfig.unmount();
     esp_restart();
     }
   }
