@@ -26,31 +26,14 @@
 #include "ovms_log.h"
 static const char *TAG = "12battery";
 
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/xtensa_api.h"
-#include "rom/rtc.h"
-#include "rom/uart.h"
-#include "soc/rtc_cntl_reg.h"
-#include "esp_system.h"
-#include "esp_panic.h"
-#include "esp_task_wdt.h"
-#include <driver/adc.h>
-
-#include "ovms.h"
 #include "ovms_boot.h"
-#include "ovms_command.h"
-#include "ovms_metrics.h"
-#include "ovms_notify.h"
+extern boot_data_t boot_data;
+
 #include "ovms_config.h"
-#include "metrics_standard.h"
-#include "string_writer.h"
-#include <string.h>
 #include "ovms_12vbattery.h"
 #include "ovms_peripherals.h"
 
-
-
+//MARK: Battery Measuring
 
 float currentBatteryLevelAvg()
 {
@@ -82,63 +65,6 @@ float currentBatteryLevelAvg()
       return 2544.0;
     #endif // CONFIG_OVMS_COMP_ADC
 }
-//
-//struct BatteryCalibrationPoint
-//{
-//    float voltage;
-//    float level;
-//} typedef;
-//
-//struct BatteryCalibrationLine
-//{
-//    BatteryCalibrationPoint low;
-//    BatteryCalibrationPoint high;
-//} typedef;
-//
-//
-//BatteryCalibrationPoint calibrationFor11V(BatteryCalibrationPoint calibration)
-//{
-//    BatteryCalibrationLine lowLine  = { low: { voltage: 11.0, level:1967.0 }, high: { voltage: 15.0, level:2787.5 } };
-//    BatteryCalibrationLine highLine = { low: { voltage: 11.0, level:2200.5 }, high: { voltage: 15.0, level:3098.0 } };
-//
-//    float lowlinePitch  = ( lowLine.high.level  - lowLine.low.level )  / ( lowLine.high.voltage  - logLine.low.voltage );
-//    float highlinePitch = ( highLine.high.level - highLine.low.level ) / ( highLine.high.voltage - highLine.low.voltage );
-//
-//    float lowlevel  = lowLine.low.level  + ( (calibration.voltage - logLine.low.voltage)  * lowlinePitch );
-//    float highlevel = highLine.low.level + ( (calibration.voltage - highLine.low.voltage) * highlinePitch );
-//
-//    float ratiolowhigh = ( calibratedLevel - lowlevel) /  ( highlevel - lowlevel );
-//
-//    float ascending = lowascending + ( (highascending - lowascending) * ratiolowhigh ) ;
-//
-//    float calibrationValue = calibratedLevel - (( calibratedVoltage - 11.0 ) * ascending );
-//
-//    BatteryCalibration
-//    return calibrationValue;
-//}
-//
-//
-
-float calibrationValueFor11V(float calibratedVoltage, float calibratedLevel)
-{
-    float   low11v  = 1967.0; float low15v  = 2787.5;
-    float   high11v = 2200.5; float high15v = 3098.0;
-
-    float   lowascending  = ( low15v  - low11v  ) / ( 15.0 - 11.0 );
-    float   highascending = ( high15v - high11v ) / ( 15.0 - 11.0 );
-
-    float   lowlevel  = low11v  + ( (calibratedVoltage - 11.0) * lowascending );
-    float   highlevel = high11v + ( (calibratedVoltage - 11.0) * highascending );
-
-    float   ratiolowhigh = ( calibratedLevel - lowlevel) /  ( highlevel - lowlevel );
-
-    float   ascending = lowascending + ( (highascending - lowascending) * ratiolowhigh ) ;
-
-    float   calibrationValue = calibratedLevel - (( calibratedVoltage - 11.0 ) * ascending );
-
-    return calibrationValue;
-}
-
 
 
 float currentBatteryVoltageAdjusted(float calibratedVoltage, float calibratedLevel)
@@ -163,38 +89,6 @@ float currentBatteryVoltageAdjusted(float calibratedVoltage, float calibratedLev
     return currentVoltage;
 }
 
-uint32_t batteryLevelForVoltageAndCalibrationFactor(float voltage,float calibrationFactor)
-{
-    float   calibratedVoltage = 11.0;
-    float   calibratedLevel = 11.0 * calibrationFactor;
-
-    float   low11v  = 1967.0; float low15v  = 2787.5;
-    float   high11v = 2200.5; float high15v = 3098.0;
-
-    float   lowascending  = ( low15v  - low11v  ) / ( 15.0 - 11.0 );
-    float   highascending = ( high15v - high11v ) / ( 15.0 - 11.0 );
-
-    float   lowlevel  = low11v  + ( (calibratedVoltage - 11.0) * lowascending );
-    float   highlevel = high11v + ( (calibratedVoltage - 11.0) * highascending );
-
-    float   ratiolowhigh = ( calibratedLevel - lowlevel) /  ( highlevel - lowlevel );
-
-    float   ascending = lowascending + ( (highascending - lowascending) * ratiolowhigh ) ;
-
-    float   calibrationValue = calibratedLevel - (( calibratedVoltage - voltage ) * ascending );
-
-    return calibrationValue;
-}
-
-uint32_t packWakeupVoltageAndCalibrationFactor(float wakeVoltage, float calibrationFactor)
-{
-    uint32_t    voltage = (uint32_t)(wakeVoltage * 1000.0);
-    uint32_t    factor  = (uint32_t)(calibrationFactor * 10.0);
-    uint32_t    packed  = (voltage << 16) | (factor & 0xFFFF);
-
-    return packed;
-}
-
 
 bool voltageIsInAcceptableRange(float currentVoltage,float alertVoltage)
 {
@@ -211,6 +105,7 @@ bool voltageIsInAcceptableRange(float currentVoltage,float alertVoltage)
     return false;
 }
 
+
 bool isBatteryInAcceptableRange(uint32_t packedvalue)
 {
     float   wakeVoltage         = ((float)(packedvalue >> 16)) / 1000.0;
@@ -218,15 +113,12 @@ bool isBatteryInAcceptableRange(uint32_t packedvalue)
 
     float   currentVoltage = currentBatteryVoltageAdjusted(wakeVoltage,wakeVoltage * calibrationFactor);
 
-    ESP_LOGI(TAG, "wakeVoltage:%f calibration:%f currentVoltage:%f",wakeVoltage,calibrationFactor,currentVoltage);
+    ESP_LOGI(TAG, "isBatteryInAcceptableRange: wakeVoltage:%f calibration:%f currentVoltage:%f",wakeVoltage,calibrationFactor,currentVoltage);
 
     return voltageIsInAcceptableRange(currentVoltage,wakeVoltage);
 }
 
-
-extern boot_data_t boot_data;
-
-//RTC_DATA_ATTR unsigned int packedWakeupVoltageAndCalibration = 0;
+//MARK: Packing/Unpacking
 
 void setPackedWakeupVoltage(uint32_t packedVoltage)
 {
@@ -234,11 +126,47 @@ void setPackedWakeupVoltage(uint32_t packedVoltage)
     boot_data.crc = boot_data.calc_crc();
 }
 
+
 uint32_t getPackedWakeupVoltage()
 {
     return boot_data.battery12vinfopacked;
 }
 
+
+uint32_t packWakeupVoltageAndCalibrationFactor(float wakeVoltage, float calibrationFactor)
+{
+    uint32_t    voltage = (uint32_t)(wakeVoltage * 1000.0);
+    uint32_t    factor  = (uint32_t)(calibrationFactor * 10.0);
+    uint32_t    packed  = (voltage << 16) | (factor & 0xFFFF);
+
+    return packed;
+}
+
+
+uint32_t packedValueFromConfiguration()
+{
+    uint32_t packedValue = 0;
+
+    bool powermanagementIsEnabled = MyConfig.GetParamValueBool("power", "enabled", false);
+    bool lowpowerSleepIsEnabled   = MyConfig.GetParamValueInt("power", "12v_shutdown_delay", 0 ) > 0 ? true : false;
+
+    ESP_LOGI(TAG, "packedValueFromConfiguration: pwrmgnt: %d lowpowersleep:%d",powermanagementIsEnabled,lowpowerSleepIsEnabled);
+
+    if (powermanagementIsEnabled && lowpowerSleepIsEnabled)
+    {
+        float normvoltage       = MyConfig.GetParamValueFloat("vehicle", "12v.ref", 12.6);
+        float calibrationfactor = MyConfig.GetParamValueFloat("system.adc","factor12v", 195.7);
+
+        ESP_LOGI(TAG, "packedValueFromConfiguration: myconfig %f %f",normvoltage,calibrationfactor);
+
+        packedValue = packWakeupVoltageAndCalibrationFactor(normvoltage,calibrationfactor);
+    }
+
+    ESP_LOGI(TAG,"packedValueFromConfiguration: %d %d\n",(packedValue >>16),(packedValue & 0xFFFF) );
+    return packedValue;
+}
+
+//MARK: Sleeping
 
 void sleepImmediatelyIfNeeded()
 {
@@ -252,33 +180,11 @@ void sleepImmediatelyIfNeeded()
 
     if( packedValue && !isBatteryInAcceptableRange(packedValue) )
     {
-      ESP_LOGE(TAG, "12V level insufficient, re-entering deep sleep");
+      ESP_LOGE(TAG, "sleepImmediatelyIfNeeded: 12V level insufficient, re-entering deep sleep");
       sleepImmediately(packedValue);
     }
 }
 
-uint32_t packedValueFromConfiguration()
-{
-    uint32_t packedValue = 0;
-
-    bool powermanagementIsEnabled = MyConfig.GetParamValueBool("power", "enabled", false);
-    bool lowpowerSleepIsEnabled   = MyConfig.GetParamValueInt("power", "12v_shutdown_delay", 0 ) > 0 ? true : false;
-
-    ESP_LOGI(TAG, "pwrmgnt: %d lowpowersleep:%d",powermanagementIsEnabled,lowpowerSleepIsEnabled);
-
-    if (powermanagementIsEnabled && lowpowerSleepIsEnabled)
-    {
-        float normvoltage       = MyConfig.GetParamValueFloat("vehicle", "12v.ref", 12.6);
-        float calibrationfactor = MyConfig.GetParamValueFloat("system.adc","factor12v", 195.7);
-
-        ESP_LOGI(TAG, "myconfig %f %f",normvoltage,calibrationfactor);
-
-        packedValue = packWakeupVoltageAndCalibrationFactor(normvoltage,calibrationfactor);
-    }
-
-    ESP_LOGI(TAG,"packedValueFromConfiguration: %d %d\n",(packedValue >>16),(packedValue & 0xFFFF) );
-    return packedValue;
-}
 
 void sleepImmediately()
 {
@@ -287,35 +193,12 @@ void sleepImmediately()
     sleepImmediately(packedValue);
 }
 
+
 void sleepImmediately(uint32_t packedValue,uint32_t time)
 {
-    ESP_LOGI(TAG,"sleepImmediately(packedValue):");
+    ESP_LOGI(TAG,"sleepImmediately(packedValue,time): %d %d %d\n",(packedValue >>16),(packedValue & 0xFFFF),time );
 
     setPackedWakeupVoltage(packedValue);
-  //  esp_set_deep_sleep_wake_stub(esp_wake_deep_sleep);
-    ESP_LOGI(TAG,"sleepImmediately()4");
+    ESP_LOGI(TAG,"sleepImmediately: entering deep sleep");
     esp_deep_sleep(1000000LL * time);
 }
-
-
-//void RTC_IRAM_ATTR esp_wake_deep_sleep(void) {
-//    esp_default_wake_deep_sleep();
-//    // Add additional functionality here
-//}
-
-
-RTC_DATA_ATTR int wake_count;
-
-void RTC_IRAM_ATTR esp_wake_deep_sleep(void) {
-    esp_default_wake_deep_sleep();
-    //static RTC_RODATA_ATTR const char fmt_str[] = "Wake count %d\n";
-    //esp_rom_printf(fmt_str, wake_count++);
-    ESP_LOGI(TAG,"wake %d",wake_count);
-
-    if( wake_count < 10)
-    {
-        esp_deep_sleep(1000000LL * 5);
-    }
-}
-
-

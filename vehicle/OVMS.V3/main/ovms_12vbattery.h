@@ -26,26 +26,15 @@
 #ifndef __OVMS_12VBATTERY_H__
 #define __OVMS_12VBATTERY_H__
 
-#include <string>
-
-#include "rom/rtc.h"
-#include "rom/crc.h"
-#include "esp_system.h"
-#include "ovms_events.h"
-#include "ovms_mutex.h"
-
-//float calibrationValueFor11V(float calibratedVoltage, float calibratedLevel);
-float currentBatteryVoltageAdjusted(float calibratedVoltage, float calibratedLevel);
 float currentBatteryLevelAvg();
-//uint32_t packWakeupVoltageAndCalibrationFactor(float wakeVoltage, float calibrationFactor);
+float currentBatteryVoltageAdjusted(float calibratedVoltage, float calibratedLevel);
 bool voltageIsInAcceptableRange(float currentVoltage,float alertVoltage);
 bool isBatteryInAcceptableRange(uint32_t packedvalue);
-//
-void sleepImmediatelyIfNeeded();
+
 uint32_t packedValueFromConfiguration();
-void sleepImmediately(uint32_t packedvalue,uint32_t howlong = 30);
 
-
-
+void sleepImmediatelyIfNeeded();
+void sleepImmediately();
+void sleepImmediately(uint32_t packedvalue,uint32_t howlong = 5);
 
 #endif //#ifndef __OVMS_12VBATTERY_H__
