@@ -247,20 +247,23 @@ Boot::Boot()
     }
   else if (cpu0 == DEEPSLEEP_RESET)
     {
-    memset(&boot_data,0,sizeof(boot_data_t));
-    m_bootreason = BR_Wakeup;
-    esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
-    ESP_LOGI(TAG, "Wakeup from deep sleep detected, wakeup cause %d", wakeup_cause);
-
     // There is currently only one deep sleep application: saving the 12V battery
     // from depletion. So we need to check if the voltage level is sufficient for
     // normal operation now. MyPeripherals has not been initialized yet, so we need
     // to read the ADC manually here.
-    #ifdef CONFIG_OVMS_COMP_ADC
-    sleepImmediatelyIfNeeded();
-    #else
-      ESP_LOGW(TAG, "ADC not available, cannot check 12V level");
-    #endif // CONFIG_OVMS_COMP_ADC
+
+    if( boot_data.crc == boot_data.calc_crc() )
+      {
+      #ifdef CONFIG_OVMS_COMP_ADC
+      sleepImmediatelyIfNeeded();
+      #else
+        ESP_LOGW(TAG, "ADC not available, cannot check 12V level");
+      #endif // CONFIG_OVMS_COMP_ADC
+      }
+    memset(&boot_data,0,sizeof(boot_data_t));
+    m_bootreason = BR_Wakeup;
+    esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
+    ESP_LOGI(TAG, "Wakeup from deep sleep detected, wakeup cause %d", wakeup_cause);
     }
   else if (boot_data.crc != boot_data.calc_crc())
     {

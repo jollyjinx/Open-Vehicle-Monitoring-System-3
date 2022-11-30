@@ -24,7 +24,7 @@
 */
 
 #include "ovms_log.h"
-static const char *TAG = "12battery";
+static const char *TAG = "12vbattery";
 
 #include "ovms_boot.h"
 extern boot_data_t boot_data;
@@ -120,16 +120,20 @@ bool isBatteryInAcceptableRange(uint32_t packedvalue)
 
 //MARK: Packing/Unpacking
 
-void setPackedWakeupVoltage(uint32_t packedVoltage)
+void setPackedWakeupVoltage(uint32_t packedValue)
 {
-    boot_data.battery12vinfopacked = packedVoltage;
+    ESP_LOGI(TAG,"setPackedWakeupVoltage: %d %d",(packedValue >>16),(packedValue & 0xFFFF) );
+    boot_data.battery12vinfopacked = packedValue;
     boot_data.crc = boot_data.calc_crc();
 }
 
 
 uint32_t getPackedWakeupVoltage()
 {
-    return boot_data.battery12vinfopacked;
+    uint32_t packedValue = boot_data.battery12vinfopacked;
+
+    ESP_LOGI(TAG,"getPackedWakeupVoltage: %d %d",(packedValue >>16),(packedValue & 0xFFFF) );
+    return packedValue;
 }
 
 
@@ -162,7 +166,7 @@ uint32_t packedValueFromConfiguration()
         packedValue = packWakeupVoltageAndCalibrationFactor(normvoltage,calibrationfactor);
     }
 
-    ESP_LOGI(TAG,"packedValueFromConfiguration: %d %d\n",(packedValue >>16),(packedValue & 0xFFFF) );
+    ESP_LOGI(TAG,"packedValueFromConfiguration: %d %d",(packedValue >>16),(packedValue & 0xFFFF) );
     return packedValue;
 }
 
@@ -172,11 +176,9 @@ void sleepImmediatelyIfNeeded()
 {
     uint32_t packedValue = packedValueFromConfiguration();
 
-    ESP_LOGI(TAG,"sleepImmediatelyIfNeeded: %d %d\n",(packedValue >>16),(packedValue & 0xFFFF) );
-
     if(packedValue == 0) packedValue = getPackedWakeupVoltage();
 
-    ESP_LOGI(TAG,"sleepImmediatelyIfNeeded: %d %d\n",(packedValue >>16),(packedValue & 0xFFFF) );
+    ESP_LOGI(TAG,"sleepImmediatelyIfNeeded2: %d %d",(packedValue >>16),(packedValue & 0xFFFF) );
 
     if( packedValue && !isBatteryInAcceptableRange(packedValue) )
     {
@@ -196,7 +198,7 @@ void sleepImmediately()
 
 void sleepImmediately(uint32_t packedValue,uint32_t time)
 {
-    ESP_LOGI(TAG,"sleepImmediately(packedValue,time): %d %d %d\n",(packedValue >>16),(packedValue & 0xFFFF),time );
+    ESP_LOGI(TAG,"sleepImmediately(packedValue,time): %d %d %d",(packedValue >>16),(packedValue & 0xFFFF),time );
 
     setPackedWakeupVoltage(packedValue);
     ESP_LOGI(TAG,"sleepImmediately: entering deep sleep");
