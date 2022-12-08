@@ -47,6 +47,7 @@ static const char *TAG = "test";
 #include "can.h"
 #include "strverscmp.h"
 #include "ovms_12vbattery.h"
+#include "cpu_start_battery.h"
 
 void test_deepsleep(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, const char* const* argv)
   {
@@ -324,10 +325,25 @@ void test_mkstemp(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc,
   if (fd1 >= 0) { close(fd1); unlink(tn1); }
   if (fd2 >= 0) { close(fd2); unlink(tn2); }
   }
+extern uint32_t battery12vinfopacked1;
+extern uint32_t battery12vinfopacked2;
 
 
 void test_batterylevel(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, const char* const* argv)
   {
+    {
+    float   wakeVoltage         = ((float)(battery12vinfopacked1 >> 16)) / 1000.0;
+    float   calibrationFactor   = ((float)(battery12vinfopacked1 & 0xFFFF)) / 10.0;
+
+    writer->printf("battery12vinfopacked1: 0x%08x %f %f\n",battery12vinfopacked1,wakeVoltage,calibrationFactor);
+    }
+    {
+    float   wakeVoltage         = ((float)(battery12vinfopacked2 >> 16)) / 1000.0;
+    float   calibrationFactor   = ((float)(battery12vinfopacked2 & 0xFFFF)) / 10.0;
+
+    writer->printf("battery12vinfopacked2: 0x%08x %f %f\n",battery12vinfopacked2,wakeVoltage,calibrationFactor);
+    }
+
     uint32_t packedvalue = packedValueFromConfiguration();
     float   wakeVoltage         = ((float)(packedvalue >> 16)) / 1000.0;
     float   calibrationFactor   = ((float)(packedvalue & 0xFFFF)) / 10.0;
@@ -336,7 +352,14 @@ void test_batterylevel(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int 
     writer->printf("isBatteryInAcceptableRange: %d\n",isacceptable);
 
     float voltage = currentBatteryVoltageAdjusted( wakeVoltage , wakeVoltage * calibrationFactor );
-    writer->printf("test %f\n",voltage);
+    writer->printf("current voltage:%f\n",voltage);
+    writer->printf("battery12vWakeCounter:%d\n",battery12vWakeCounter);
+
+
+        for(int i=0;i<BATTERY12V_WAKE_VOLTAGE_COUNT;i++)
+        {
+            writer->printf("wakehistory[%d]:%d\n",i,battery12vWakeVoltages[i]);
+        }
    }
 
 void test_string(int verbosity, OvmsWriter* writer, OvmsCommand* cmd, int argc, const char* const* argv)

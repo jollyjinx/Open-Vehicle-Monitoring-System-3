@@ -236,7 +236,6 @@ Boot::Boot()
   m_shutdown_pending = 0;
   m_shutdown_deepsleep = false;
   m_shutting_down = false;
-
   m_resetreason = esp_reset_reason(); // Note: necessary to link reset_reason module
 
   if (cpu0 == POWERON_RESET)
@@ -255,7 +254,7 @@ Boot::Boot()
     if( boot_data.crc == boot_data.calc_crc() )
       {
       #ifdef CONFIG_OVMS_COMP_ADC
-      sleepImmediatelyIfNeeded();
+        sleepImmediatelyIfNeeded();
       #else
         ESP_LOGW(TAG, "ADC not available, cannot check 12V level");
       #endif // CONFIG_OVMS_COMP_ADC
@@ -275,8 +274,6 @@ Boot::Boot()
     {
     boot_data.boot_count++;
     ESP_LOGI(TAG, "Boot #%d reasons for CPU0=%d and CPU1=%d",boot_data.boot_count,cpu0,cpu1);
-
-    sleepImmediatelyIfNeeded();
 
     if (boot_data.soft_reset)
       {

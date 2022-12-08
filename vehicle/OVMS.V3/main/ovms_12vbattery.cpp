@@ -27,11 +27,17 @@
 static const char *TAG = "12vbattery";
 
 #include "ovms_boot.h"
-extern boot_data_t boot_data;
-
 #include "ovms_config.h"
 #include "ovms_12vbattery.h"
 #include "ovms_peripherals.h"
+#include "cpu_start_battery.h"
+
+
+#ifdef __OVMS_CPU_START_SLEEP_H__
+extern uint32_t battery12vinfopacked1;
+extern uint32_t battery12vinfopacked2;
+#endif
+
 
 //MARK: Battery Measuring
 
@@ -123,6 +129,8 @@ bool isBatteryInAcceptableRange(uint32_t packedvalue)
 void setPackedWakeupVoltage(uint32_t packedValue)
 {
     ESP_LOGI(TAG,"setPackedWakeupVoltage: %d %d",(packedValue >>16),(packedValue & 0xFFFF) );
+    battery12vinfopacked1 = packedValue;
+    battery12vinfopacked2 = packedValue;
     boot_data.battery12vinfopacked = packedValue;
     boot_data.crc = boot_data.calc_crc();
 }
@@ -150,7 +158,8 @@ uint32_t packWakeupVoltageAndCalibrationFactor(float wakeVoltage, float calibrat
 uint32_t packedValueFromConfiguration()
 {
     uint32_t packedValue = 0;
-
+    ESP_LOGI(TAG, "packedValueFromConfiguration()");
+    
     bool powermanagementIsEnabled = MyConfig.GetParamValueBool("power", "enabled", false);
     bool lowpowerSleepIsEnabled   = MyConfig.GetParamValueInt("power", "12v_shutdown_delay", 0 ) > 0 ? true : false;
 
@@ -200,6 +209,10 @@ void sleepImmediately(uint32_t packedValue,uint32_t time)
 {
     ESP_LOGI(TAG,"sleepImmediately(packedValue,time): %d %d %d",(packedValue >>16),(packedValue & 0xFFFF),time );
 
+    if( MyConfig.ismounted() )
+    {
+        MyConfig.unmount();
+    }
     setPackedWakeupVoltage(packedValue);
     ESP_LOGI(TAG,"sleepImmediately: entering deep sleep");
     esp_deep_sleep(1000000LL * time);

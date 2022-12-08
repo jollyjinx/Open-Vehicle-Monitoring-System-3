@@ -139,6 +139,7 @@ class Boot
     esp_reset_reason_t m_resetreason;
     unsigned int m_crash_count_early;
     bool m_stack_overflow;
+    bool m_boot_sleep_crc_info;
   };
 
 extern Boot MyBoot;

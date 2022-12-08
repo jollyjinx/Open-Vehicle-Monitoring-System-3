@@ -35,6 +35,6 @@ uint32_t packedValueFromConfiguration();
 
 void sleepImmediatelyIfNeeded();
 void sleepImmediately();
-void sleepImmediately(uint32_t packedvalue,uint32_t howlong = 5);
+void sleepImmediately(uint32_t packedvalue,uint32_t howlong = 30);
 
 #endif //#ifndef __OVMS_12VBATTERY_H__
